@@ -1,0 +1,129 @@
+from numpy import *
+
+def loadDataSet():
+    dataMat = []; labelMat = []
+    fr = open('testSet.txt')   #\r\n表示回车+换行
+    for line in fr.readlines(): #这样line是一行一行的'0.317029\t14.739025\t0\r\n'  最后带有一个'\n'的
+        lineArr = line.strip().split() 
+        #line.strip()：去掉的是末尾的 '0.317029\t14.739025\t0'        
+		#后面再.split()就是把中间切分开来，就成了['0.317029', '14.739025', '0']
+        dataMat.append([1.0, float(lineArr[0]), float(lineArr[1])]) #因为上面都是得到的''，所以要转化为float
+        #dataMat第一个是1.0表示，把b也弄到了w中了
+		
+		labelMat.append(int(lineArr[2]))
+    return dataMat,labelMat
+
+def sigmoid(inX):
+    return 1.0/(1+exp(-inX))
+
+#这个是梯度下降算法
+def gradAscent(dataMatIn, classLabels):#本来dataMatIn是数组的，因为下面要用矩阵的运算
+    dataMatrix = mat(dataMatIn)             #convert to NumPy matrix
+    labelMat = mat(classLabels).transpose() #convert to NumPy matrix #转化成为列
+    m,n = shape(dataMatrix) #m是个数，n是特征数+1：因为b弄到了w中
+    alpha = 0.001
+    maxCycles = 500
+	#先把所有的wi都初始化为1
+    weights = ones((n,1)) #因为是每个特征对应一个的w的 ones是array:ones(n,1)得到的是n行1列 ones(n)得到的是1行3列
+    for k in range(maxCycles):              #heavy on matrix operations
+        h = sigmoid(dataMatrix*weights)     #matrix mult 矩阵的相乘（直接就是*）（当数组列表的话，是对应相乘的）
+        error = (labelMat - h)              #vector subtraction
+        weights = weights + alpha * dataMatrix.transpose()* error #matrix mult #.transpose()是为了矩阵运算
+    return weights
+
+def plotBestFit(weights):
+    import matplotlib.pyplot as plt
+    dataMat,labelMat=loadDataSet()
+    dataArr = array(dataMat)
+    n = shape(dataArr)[0] 
+    xcord1 = []; ycord1 = [] #这两个数组是为了画图用的，把两种label的数据分开
+    xcord2 = []; ycord2 = []
+    for i in range(n):
+        if int(labelMat[i])== 1:
+            xcord1.append(dataArr[i,1]); ycord1.append(dataArr[i,2]) #相对应的就都存起来了
+        else:
+            xcord2.append(dataArr[i,1]); ycord2.append(dataArr[i,2])
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    ax.scatter(xcord1, ycord1, s=30, c='red', marker='s')
+    ax.scatter(xcord2, ycord2, s=30, c='green')
+    x = arange(-3.0, 3.0, 0.1)
+    y = (-weights[0]-weights[1]*x)/weights[2]
+    ax.plot(x, y)
+    plt.xlabel('X1'); plt.ylabel('X2');
+    plt.show()
+#随机梯度：每次用其中的一个sample
+def stocGradAscent0(dataMatrix, classLabels):
+    m,n = shape(dataMatrix) #注意，这个地方全部用的数组，不是mat
+    alpha = 0.01
+    weights = ones(n)   #initialize to all ones
+    for i in range(m): #至始至终都是用的一个[i]
+        h = sigmoid(sum(dataMatrix[i]*weights)) #这样数array对应相乘
+        #error误差就是这种logistics的梯度值
+		error = classLabels[i] - h #得到是每一个sample（就是每一行）得到的误差（因为这种梯度就是这个）
+        weights = weights + alpha * error * dataMatrix[i] #dataMatrix[i] 就是上一轮的一行值
+    return weights
+
+#
+def stocGradAscent1(dataMatrix, classLabels, numIter=150):
+    m,n = shape(dataMatrix)
+    weights = ones(n)   #initialize to all ones
+    for j in range(numIter):#这个是指的迭代次数
+        dataIndex = range(m) 
+        for i in range(m):#这个是指每一行的数据都拿来用一次
+		    #下面这个alpha是个动态的变量，第一部分表示越来越小，第二部分表示不会为0
+            #不能为0就表明在迭代若干次之后还有影响力（常数项可以变）
+			#当j<<max(i)的时，不能保证严格下降（避免参数的严格下降也在其他算法中很常见）
+			alpha = 4/(1.0+j+i)+0.0001    #apha decreases with iteration, does not 
+            
+			#这个地方引入一个随机选取样本（上面是按照顺序来选的）：减少了周期性的波动
+			randIndex = int(random.uniform(0,len(dataIndex)))#go to 0 because of the constant
+            #这个仅仅是一个随机选出来的index，计算每次weights的时候，就是选取这样的index
+			
+			h = sigmoid(sum(dataMatrix[randIndex]*weights))
+            error = classLabels[randIndex] - h
+            weights = weights + alpha * error * dataMatrix[randIndex]
+            
+			del(dataIndex[randIndex]) #需要删除（dataIndex和m的大小一样的）
+    return weights
+
+#下面是针对病马死亡的例子的：
+def classifyVector(inX, weights):  
+    prob = sigmoid(sum(inX*weights)) #因为都是向量的，所以sum
+    if prob > 0.5: return 1.0
+    else: return 0.0
+
+def colicTest():
+    frTrain = open('horseColicTraining.txt'); frTest = open('horseColicTest.txt')
+    trainingSet = []; trainingLabels = []
+    for line in frTrain.readlines():
+        currLine = line.strip().split('\t')
+        lineArr =[]
+        for i in range(21): #因为这个是有21个特征的（0-20）
+            lineArr.append(float(currLine[i])) #都转化为float型的Array（每一行）
+        trainingSet.append(lineArr)
+        trainingLabels.append(float(currLine[21]))
+	
+	#由train数据得到训练模型	
+    trainWeights = stocGradAscent1(array(trainingSet), trainingLabels, 1000)
+    
+	
+	errorCount = 0; numTestVec = 0.0
+    for line in frTest.readlines():
+        numTestVec += 1.0 #计算的次数，最优取均值
+        currLine = line.strip().split('\t')
+        lineArr =[]
+        for i in range(21):
+            lineArr.append(float(currLine[i]))
+        if int(classifyVector(array(lineArr), trainWeights))!= int(currLine[21]):
+            errorCount += 1
+    errorRate = (float(errorCount)/numTestVec)
+    print "the error rate of this test is: %f" % errorRate
+    return errorRate
+
+def multiTest():
+    numTests = 10; errorSum=0.0
+    for k in range(numTests):
+        errorSum += colicTest() #colicTest()是上面的函数，调用之后得到一个值
+    print "after %d iterations the average error rate is: %f" % (numTests, errorSum/float(numTests))
+        
